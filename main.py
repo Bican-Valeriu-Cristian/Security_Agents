@@ -4,12 +4,13 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.tools import Tool
 from langgraph.prebuilt import create_react_agent 
+
 # Ignorăm avertismentele
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Importăm unealta
 from tools.a02_scanner import scaneaza_headere_http
-
+from tools.a03_cve_check import verifica_versiuni_si_cve 
 load_dotenv()
 
 # Definim uneltele
@@ -17,7 +18,12 @@ unelte = [
     Tool(
         name="Scanner_Configurari_A02",
         func=scaneaza_headere_http,
-        description="Unealtă obligatorie pentru a verifica configurările HTTP și headerele de securitate (OWASP A02). Așteaptă un URL complet ca input."
+        description="Unealtă obligatorie pentru a verifica configurările HTTP (OWASP A02). Așteaptă un URL complet ca input."
+    ),
+    Tool(
+        name="Verificator_CVE_A03",
+        func=verifica_versiuni_si_cve,
+        description="Unealtă pentru a identifica versiunile tehnologiilor de pe server și a căuta vulnerabilități cunoscute (CVE-uri) conform OWASP A03. Așteaptă un URL complet."
     )
 ]
 
@@ -40,14 +46,17 @@ if __name__ == "__main__":
     
     # 2. Prompt-ul pentru raportul de audit
     instructiuni = f"""Ești un auditor de securitate cibernetică.
-    Evaluează ținta {tinta} pentru vulnerabilități OWASP A02 (Security Misconfiguration) folosind unealta Scanner_Configurari_A02.
+    Evaluează ținta {tinta} folosind ambele unelte la dispoziție:
+    1. Folosește Scanner_Configurari_A02 pentru configurări HTTP.
+    2. Folosește Verificator_CVE_A03 pentru a detecta versiunile și CVE-urile posibile.
     
     IMPORTANT: Trebuie să răspunzi STRICT cu un Raport de Audit formatat în Markdown.
-    Raportul trebuie să conțină următoarele secțiuni:
+    Raportul trebuie să conțină:
     # 🛡️ Raport de Audit de Securitate
     ## 🎯 Ținta Evaluată
-    ## 🚨 Vulnerabilități Descoperite (A02)
-    ## 🛠️ Pași de Remediere (Explicați clar)
+    ## 🚨 Vulnerabilități de Configurare (A02)
+    ## 📦 Versiuni și CVE-uri Descoperite (A03)
+    ## 🛠️ Pași de Remediere
     """
     
     # Pornim agentul
