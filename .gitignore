@@ -3,7 +3,7 @@
 
 # Rezultate/Artifacte (Rapoartele tale)
 raport/
-*.md
+
 
 # Dependențe Python
 __pycache__/
