@@ -30,7 +30,7 @@ unelte = [
 # Inițializăm LLM-ul Groq
 llm = ChatGroq(
     temperature=0, 
-    model_name="llama-3.3-70b-versatile", 
+    model="llama-3.3-70b-versatile", 
     api_key=os.getenv("GROQ_API_KEY")
 )
 
