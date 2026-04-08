@@ -36,7 +36,29 @@ def scaneaza_headere_http(url: str) -> str:
             rezultat += "\n[ATENȚIE - A02] Următoarele headere de securitate esențiale LIPSESC:\n"
             for h in lipsesc:
                 rezultat += f"- {h}\n"
-                
+
+        # Acestea sunt endpoint-uri specifice Juice Shop care nu ar trebui să fie publice
+        directoare_test = [
+            "/admin", 
+            "/ftp", 
+            "/.env", 
+            "/architecture",
+            "/promotion"
+        ]   
+
+        rezultat += "\nVerificare directoare sensibile:\n"
+        url_baza = url.rstrip('/')
+        for cale in directoare_test:
+            tinta_completa = f"{url_baza}{cale}"
+            try:
+                r_test = requests.get(tinta_completa, timeout=3)
+                # Daca primim 200 (OK) sau 403 (Forbidden), înseamna ca directorul exista
+                if r_test.status_code == 200:
+                    rezultat += f"- GĂSIT: {cale} (Accesibil!)\n"
+                elif r_test.status_code == 403:
+                    rezultat += f"- RESTRICȚIONAT: {cale} (Existent, dar protejat)\n"
+            except:
+                continue
         return rezultat
 
     except requests.exceptions.RequestException as e:
