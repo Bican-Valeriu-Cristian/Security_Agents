@@ -32,11 +32,48 @@ def scaneaza_headere_http(url: str) -> str:
         
         lipsesc = [h for h in headere_securitate_asteptate if h not in headere]
         
+        severitate_headere = {
+    'Strict-Transport-Security': ('ÎNALTĂ', 'Permite atacuri MITM prin HTTP'),
+    'X-Frame-Options': ('MEDIE', 'Vulnerabil la clickjacking'),
+    'X-Content-Type-Options': ('MEDIE', 'Permite MIME sniffing'),
+    'Content-Security-Policy': ('ÎNALTĂ', 'Permite injectare de scripturi XSS'),
+     } 
         if lipsesc:
             rezultat += "\n[ATENȚIE - A02] Următoarele headere de securitate esențiale LIPSESC:\n"
             for h in lipsesc:
-                rezultat += f"- {h}\n"
-                
+                 sev, motiv = severitate_headere.get(h, ('MEDIE', 'Risc de securitate'))
+                 rezultat += f"- {h} | Severitate: {sev} | Risc: {motiv}\n"
+
+        # Acestea sunt endpoint-uri specifice Juice Shop care nu ar trebui să fie publice
+        directoare_test = [
+            "/admin", 
+            "/ftp", 
+            "/.env", 
+            "/architecture",
+            "/promotion"
+        ]   
+
+        rezultat += "\nVerificare directoare sensibile:\n"
+        url_baza = url.rstrip('/')
+        for cale in directoare_test:
+            tinta_completa = f"{url_baza}{cale}"
+            try:
+                r_test = requests.get(tinta_completa, timeout=3)
+                # Daca primim 200 (OK) sau 403 (Forbidden), înseamna ca directorul exista
+                severitate_cai = {
+                '/.env': 'CRITICĂ',
+                '/admin': 'ÎNALTĂ',
+                 '/ftp': 'ÎNALTĂ',
+                 '/architecture': 'MEDIE',
+                 '/promotion': 'SCĂZUTĂ',
+                }
+                sev = severitate_cai.get(cale, 'MEDIE')
+                if r_test.status_code == 200:
+                     rezultat += f"- GĂSIT: {cale} | Severitate: {sev} | STATUS: Accesibil public!\n"
+                elif r_test.status_code == 403:
+                   rezultat += f"- RESTRICȚIONAT: {cale} | Severitate: SCĂZUTĂ | STATUS: Existent, dar blocat\n"
+            except:
+                continue
         return rezultat
 
     except requests.exceptions.RequestException as e:

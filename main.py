@@ -56,6 +56,14 @@ if __name__ == "__main__":
     ## 🎯 Ținta Evaluată
     ## 🚨 Vulnerabilități de Configurare (A02)
     ## 📦 Versiuni și CVE-uri Descoperite (A03)
+    ## 📊 Scor de Risc General
+  - Calculează un scor de la 1 (minim) la 10 (critic) bazat pe:
+    * Numărul de headere lipsă cu severitate ÎNALTĂ → +2 puncte fiecare
+    * Numărul de headere lipsă cu severitate MEDIE → +1 punct fiecare  
+    * Directoare accesibile cu severitate CRITICĂ sau ÎNALTĂ → +2 puncte fiecare
+    * CVE-uri cu severitate Critică/Înaltă → +2 puncte fiecare
+  - Prezintă scorul ca: 🔴 CRITIC (8-10) / 🟠 ÎNALT (5-7) / 🟡 MEDIU (3-4) / 🟢 SCĂZUT (1-2)
+  - Explică în 2-3 propoziții de ce ai dat acel scor
     ## 🛠️ Pași de Remediere
     """
     
