@@ -11,21 +11,18 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 # Importăm unealta
 from tools.a02_scanner import scaneaza_headere_http
 from tools.a03_cve_check import verifica_versiuni_si_cve 
+from tools.a01_scraper import scaneaza_cod_sursa
 load_dotenv()
 
 # Definim uneltele
 unelte = [
-    Tool(
-        name="Scanner_Configurari_A02",
-        func=scaneaza_headere_http,
-        description="Unealtă obligatorie pentru a verifica configurările HTTP (OWASP A02). Așteaptă un URL complet ca input."
-    ),
-    Tool(
-        name="Verificator_CVE_A03",
-        func=verifica_versiuni_si_cve,
-        description="Unealtă pentru a identifica versiunile tehnologiilor de pe server și a căuta vulnerabilități cunoscute (CVE-uri) conform OWASP A03. Așteaptă un URL complet."
-    )
-]
+        Tool(name="Scanner_Configurari_A02", func=scaneaza_headere_http,
+             description="Verifică configurările HTTP (OWASP A02). Input: URL complet."),
+        Tool(name="Verificator_CVE_A03", func=verifica_versiuni_si_cve,
+             description="Detectează versiuni și CVE-uri (OWASP A03). Input: URL complet."),
+        Tool(name="Scraper_Cod_Sursa_A01", func=scaneaza_cod_sursa,
+             description="Descarcă HTML-ul și găsește comentarii sau date ascunse în sursă. Input: URL complet.")
+    ]
 
 # Inițializăm LLM-ul Groq
 llm = ChatGroq(
