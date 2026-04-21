@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.tools import Tool
 from langgraph.prebuilt import create_react_agent 
+from tools.a04_injection_check import verifica_html_injection
 
 # Ignorăm avertismentele
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -21,7 +22,9 @@ unelte = [
         Tool(name="Verificator_CVE_A03", func=verifica_versiuni_si_cve,
              description="Detectează versiuni și CVE-uri (OWASP A03). Input: URL complet."),
         Tool(name="Scraper_Cod_Sursa_A01", func=scaneaza_cod_sursa,
-             description="Descarcă HTML-ul și găsește comentarii sau date ascunse în sursă. Input: URL complet.")
+             description="Descarcă HTML-ul și găsește comentarii sau date ascunse în sursă. Input: URL complet."),    
+        Tool( name="Detector_HTML_Injection_A04", func=verifica_html_injection,
+             description="Scanează formularele și câmpurile de input pentru a identifica riscuri de injectare HTML. Input: URL complet.")
     ]
 
 # Inițializăm LLM-ul Groq
@@ -46,13 +49,17 @@ if __name__ == "__main__":
     Evaluează ținta {tinta} folosind ambele unelte la dispoziție:
     1. Folosește Scanner_Configurari_A02 pentru configurări HTTP.
     2. Folosește Verificator_CVE_A03 pentru a detecta versiunile și CVE-urile posibile.
-    
+    3. Scraper_Cod_Sursa_A01 pentru date sensibile în codul sursă.
+    4. Detector_HTML_Injection_A04 pentru a găsi formulare vulnerabile la injectare.
+
     IMPORTANT: Trebuie să răspunzi STRICT cu un Raport de Audit formatat în Markdown.
     Raportul trebuie să conțină:
     # 🛡️ Raport de Audit de Securitate
     ## 🎯 Ținta Evaluată
     ## 🚨 Vulnerabilități de Configurare (A02)
     ## 📦 Versiuni și CVE-uri Descoperite (A03)
+    ## 🔍 Analiză Cod Sursă și Secrete (A01)
+    ## 💉 Analiză Vectori de Injectare (A04)
     ## 📊 Scor de Risc General
   - Calculează un scor de la 1 (minim) la 10 (critic) bazat pe:
     * Numărul de headere lipsă cu severitate ÎNALTĂ → +2 puncte fiecare
