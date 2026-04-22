@@ -9,6 +9,7 @@ from langgraph.prebuilt import create_react_agent
 from tools.a02_scanner import scaneaza_headere_http
 from tools.a03_cve_check import verifica_versiuni_si_cve
 from tools.a01_scraper import scaneaza_cod_sursa
+from tools.a04_injection_check import verifica_html_injection
 
 load_dotenv()
 app = FastAPI()
@@ -32,15 +33,17 @@ async def scan(req: ScanRequest):
         Tool(name="Verificator_CVE_A03", func=verifica_versiuni_si_cve,
              description="Detectează versiuni și CVE-uri (OWASP A03). Input: URL complet."),
         Tool(name="Scraper_Cod_Sursa_A01", func=scaneaza_cod_sursa,
-             description="Descarcă HTML-ul și găsește comentarii sau date ascunse în sursă. Input: URL complet.")
-    ]
+             description="Descarcă HTML-ul și găsește comentarii sau date ascunse în sursă. Input: URL complet."),      
+        Tool( name="Detector_HTML_Injection_A04",  func=verifica_html_injection,
+              description="Scanează formularele și câmpurile de input pentru a identifica riscuri de injectare HTML. Input: URL complet."
+    )]
     llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile",
                    api_key=os.getenv("GROQ_API_KEY"))
     agent = create_react_agent(llm, tools=unelte)
 
     instructiuni = f"""Acționezi în rolul de Principal Security Engineer.
     Realizează un audit de securitate tehnic pentru ținta: {req.url}.
-    Utilizează exclusiv datele extrase de instrumentele din dotare (Scanner_Configurari_A02, Verificator_CVE_A03, Scraper_Cod_Sursa_A01).
+    Utilizează exclusiv datele extrase de instrumentele din dotare (Scanner_Configurari_A02, Verificator_CVE_A03, Scraper_Cod_Sursa_A01,Detector_HTML_Injection_A04).
 
     REGULI DE REDACTARE:
     - Elimină complet emoticoanele și limbajul colocvial.
@@ -72,7 +75,11 @@ async def scan(req: ScanRequest):
     - Afișează scorul exact așa: **Scor de risc calculat: [X]/10 - [CRITIC/ÎNALT/MEDIU/SCĂZUT]**
     - Justificare: [O singură frază tehnică care explică scorul]
 
-    ## 5. PLAN DE REMEDIERE (MITIGATION STRATEGY)
+    ## 5. ANALIZA COLECTĂRII DE DATE (A04 - HTML Injection)
+    - Documentează formularele identificate și câmpurile care permit input de la utilizator.
+    - Explică riscul dacă datele nu sunt sanitizate.
+
+    ## 6. PLAN DE REMEDIERE (MITIGATION STRATEGY)
     - Listează 3-4 pași exacți și prioritizați pentru a repara problemele găsite, cu focus pe cele CRITICE și ÎNALTE.
     """
     try:
