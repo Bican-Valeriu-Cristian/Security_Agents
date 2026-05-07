@@ -24,7 +24,9 @@ def scaneaza_cod_sursa(url: str) -> str:
         rezultat += "🕵️ COMENTARII ASCUNSE:\n"
         if comentarii:
             for c in comentarii:
-                rezultat += f"- \n"
+                continut = c.strip()
+                if continut:  # ignorăm comentariile goale sau doar cu spații
+                    rezultat += f"- {continut}\n"
         else:
             rezultat += "- Nu am găsit comentarii HTML.\n"
             
@@ -35,7 +37,9 @@ def scaneaza_cod_sursa(url: str) -> str:
             for inp in inputuri_ascunse:
                 nume = inp.get('name', 'fără-nume')
                 val = inp.get('value', 'fără-valoare')
-                if 'csrf' not in nume.lower(): 
+                # Ignorăm token-urile CSRF (nu sunt vulnerabilități, sunt protecții)
+                termeni_ignorati = ['csrf', 'xsrf', '_token', 'authenticity_token']
+                if not any(termen in nume.lower() for termen in termeni_ignorati):
                     rezultat += f"- Nume: '{nume}' | Valoare: '{val}'\n"
         else:
             rezultat += "- Nu am găsit input-uri ascunse relevante.\n"
@@ -81,7 +85,13 @@ def scaneaza_cod_sursa(url: str) -> str:
                 secrete_gasite = True
                 rezultat += f"\n  [{nume_vulnerabilitate}]:\n"
                 for potrivire in potriviri:
-                    valoare_gasita = potrivire if isinstance(potrivire, str) else str(potrivire)
+                    # re.findall cu grupuri de captură returnează tuple-uri.
+                    # Ex: ('api_key', 'valoarea_secretă') → vrem elementul [1]
+                    # Fără grupuri (ex: JWT), returnează direct un string.
+                    if isinstance(potrivire, tuple):
+                        valoare_gasita = potrivire[1]  # luăm valoarea secretă, nu numele variabilei
+                    else:
+                        valoare_gasita = potrivire
                     rezultat += f"  -> {valoare_gasita[:15]}...[TRUNCHIAT]\n"
 
         if not secrete_gasite:
@@ -91,6 +101,3 @@ def scaneaza_cod_sursa(url: str) -> str:
 
     except Exception as e:
         return f"Eroare la parsarea HTML pentru {url}. Detalii: {str(e)}"
-
-if __name__ == "__main__":
-    print(scaneaza_cod_sursa("http://localhost:3000"))
