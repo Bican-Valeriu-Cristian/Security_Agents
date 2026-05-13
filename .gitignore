@@ -9,7 +9,7 @@ raport/
 __pycache__/
 venv/
 *.pyc
-
+*.db
 # Dependențe JavaScript/React
 node_modules/
 dist/

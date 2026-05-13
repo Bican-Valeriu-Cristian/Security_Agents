@@ -1,9 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+
+# Securitate și JWT
+from jose import JWTError, jwt
+import bcrypt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+
+# Importuri SQLAlchemy pentru gestionarea bazei de date
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy.orm import Session, sessionmaker, relationship, declarative_base
+import datetime
 
 # Importuri LangChain
 from langchain_groq import ChatGroq
@@ -19,23 +29,100 @@ from tools.a04_injection_check import verifica_html_injection
 from tools.virustotal import verifica_reputatie_virustotal
 
 load_dotenv()
+
+# --- CONFIGURARE SECURITATE ---
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 600
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# --- CONFIGURARE BAZĂ DE DATE ---
+SQLALCHEMY_DATABASE_URL = "sqlite:///./security_agents.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    scans = relationship("ScanHistory", back_populates="owner")
+
+class ScanHistory(Base):
+    __tablename__ = "scan_history"
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String)
+    tool_used = Column(String)
+    ai_analysis = Column(Text)
+    raw_data = Column(Text)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner = relationship("User", back_populates="scans")
+
+# Cream tabelele fizic în fișierul .db
+Base.metadata.create_all(bind=engine)
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class ScanRequest(BaseModel):
+    url: str
+
+    
+# Dependinta pentru a obtine sesiunea DB în rutele FastAPI
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Sesiune invalidă sau expirată",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
         "http://localhost:5173",
-        "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
-    ],
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-class ScanRequest(BaseModel):
-    url: str
 
 def valideaza_url(url: str):
     """Funcție ajutătoare pentru a valida URL-ul peste tot."""
@@ -48,7 +135,7 @@ def valideaza_url(url: str):
 # RUTA VECHE: SCANAREA COMPLETĂ (Agent AI)
 # ==========================================
 @app.post("/scan")
-async def scan(req: ScanRequest):
+async def scan(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
 
     unelte = [
@@ -144,6 +231,15 @@ Listează maxim 5 acțiuni, ordonate de la cea mai urgentă la cea mai puțin ur
     try:
         rezultat = agent.invoke({"messages": [("user", instructiuni)]})
         raport = rezultat["messages"][-1].content
+        noua_scanare = ScanHistory(
+            url=req.url,
+            tool_used="FULL-AUDIT", # Marcam că este un audit complet
+            ai_analysis=raport,     # Salvăm raportul generat de Agent
+            raw_data="Audit realizat de Agentul AI folosind multiple unelte.",
+            owner_id=current_user.id
+        )
+        db.add(noua_scanare)
+        db.commit()
         return {"raport": raport}
 
     except Exception as e:
@@ -178,37 +274,93 @@ DATE BRUTE:
     except Exception as e:
         return f"Eroare la generarea explicației AI: {str(e)}"
 
+@app.post("/api/register")
+async def register(user: UserRegister, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.username == user.username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Utilizatorul există deja.")
+    
+    hashed_pw = hash_password(user.password)
+    new_user = User(username=user.username, hashed_password=hashed_pw)
+    db.add(new_user)
+    db.commit()
+    return {"message": "Cont creat cu succes"}
+
+@app.post("/token", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Date incorecte.")
+    
+    access_token = jwt.encode({"sub": user.username, "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)}, SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @app.post("/api/tool/a01-scraper")
-async def run_a01_scraper(req: ScanRequest):
+async def run_a01_scraper(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
     date_brute = scaneaza_cod_sursa(req.url)
     analiza_ai = analizeaza_cu_ai("Scraper Cod Sursă", date_brute)
+    
+    noua_scanare = ScanHistory(url=req.url, tool_used="A01-Scraper", ai_analysis=analiza_ai, raw_data=str(date_brute), owner_id=current_user.id)
+    db.add(noua_scanare)
+    db.commit()
+
     return {"raw_data": date_brute, "ai_analysis": analiza_ai}
 
 @app.post("/api/tool/a02-headers")
-async def run_a02_headers(req: ScanRequest):
+async def run_a02_headers(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
     date_brute = scaneaza_headere_http(req.url)
     analiza_ai = analizeaza_cu_ai("Audit Headere și Directoare", date_brute)
+
+    noua_scanare = ScanHistory(url=req.url, tool_used="A02-Headers", ai_analysis=analiza_ai, raw_data=str(date_brute), owner_id=current_user.id)
+    db.add(noua_scanare)
+    db.commit()
+
     return {"raw_data": date_brute, "ai_analysis": analiza_ai}
 
 @app.post("/api/tool/a03-cve")
-async def run_a03_cve(req: ScanRequest):
+async def run_a03_cve(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
     date_brute = verifica_versiuni_si_cve(req.url)
     analiza_ai = analizeaza_cu_ai("Identificare CVE-uri", date_brute)
+    
+    noua_scanare = ScanHistory(url=req.url, tool_used="A03-CVE", ai_analysis=analiza_ai, raw_data=str(date_brute), owner_id=current_user.id)
+    db.add(noua_scanare)
+    db.commit()
+
     return {"raw_data": date_brute, "ai_analysis": analiza_ai}
 
 @app.post("/api/tool/a04-injection")
-async def run_a04_injection(req: ScanRequest):
+async def run_a04_injection(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
     date_brute = verifica_html_injection(req.url)
     analiza_ai = analizeaza_cu_ai("Detector Vectori Injectare", date_brute)
+
+    noua_scanare = ScanHistory(url=req.url, tool_used="A04-Injection", ai_analysis=analiza_ai, raw_data=str(date_brute), owner_id=current_user.id )
+    db.add(noua_scanare)
+    db.commit()
+
     return {"raw_data": date_brute, "ai_analysis": analiza_ai}
 
 @app.post("/api/tool/virustotal")
-async def run_virustotal(req: ScanRequest):
+async def run_virustotal(req: ScanRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     valideaza_url(req.url)
     date_brute = verifica_reputatie_virustotal(req.url)
     analiza_ai = analizeaza_cu_ai("OSINT VirusTotal", date_brute)
+
+    noua_scanare = ScanHistory(url=req.url, tool_used="VirusTotal", ai_analysis=analiza_ai, raw_data=str(date_brute), owner_id=current_user.id)
+    db.add(noua_scanare)
+    db.commit()
+
     return {"raw_data": date_brute, "ai_analysis": analiza_ai}
+
+@app.get("/api/history")
+async def get_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Returnează istoricul descrescător (cele mai noi primele)
+    return db.query(ScanHistory).filter(ScanHistory.owner_id == current_user.id).order_by(ScanHistory.timestamp.desc()).all()
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
