@@ -1,5 +1,5 @@
 import requests
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urldefrag
 from bs4 import BeautifulSoup
 from collections import deque
 
@@ -17,7 +17,7 @@ def scaneaza_headere_http(url: str) -> str:
         rezultat = f"--- Rezultate Scanare HTTP pentru {url} ---\n"
         rezultat += f"Cod de răspuns: {raspuns.status_code}\n\n"
 
-        rezultat += "Headere returnate de server:\n"
+        rezultat += "📡 Headere returnate de server:\n"
         for cheie, valoare in headere.items():
             rezultat += f"- {cheie}: {valoare}\n"
 
@@ -43,7 +43,7 @@ def scaneaza_headere_http(url: str) -> str:
         }
 
         if lipsesc:
-            rezultat += "\n[ATENȚIE - A02] Următoarele headere de securitate esențiale LIPSESC:\n"
+            rezultat += "\n⚠️ [ATENȚIE - A02] Următoarele headere de securitate esențiale LIPSESC:\n"
             for h in lipsesc:
                 sev, motiv = severitate_headere.get(h, ('MEDIE', 'Risc de securitate'))
                 rezultat += f"- {h} | Severitate: {sev} | Risc: {motiv}\n"
@@ -56,7 +56,8 @@ def scaneaza_headere_http(url: str) -> str:
         rezultat += "\n📡 CRAWLING SITE (pagini descoperite):\n"
 
         domeniu_baza = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
-        vizitate = set()
+        vizitate = set()           # URL-uri complete deja procesate
+        vizitate_normalizate = set()  # versiuni fără query string, pentru deduplicare
         de_vizitat = deque([(url, 0)])  # (url, adâncime)
         pagini_gasite = []
 
@@ -79,11 +80,20 @@ def scaneaza_headere_http(url: str) -> str:
                     soup = BeautifulSoup(r.text, 'html.parser')
                     for tag in soup.find_all('a', href=True):
                         link = urljoin(url_curent, tag['href'])
+
+                        # FIX 1: Scoatem fragmentul/ancora (#contact, #top)
+                        # /about#contact și /about#team devin amândouă /about
+                        link, _ = urldefrag(link)
+
                         # Păstrăm doar link-urile de pe același domeniu
                         if link.startswith(domeniu_baza) and link not in vizitate:
-                            # Excludem fișiere binare și ancore
+                            # Excludem fișiere binare
                             if not any(link.endswith(ext) for ext in ['.jpg', '.png', '.gif', '.pdf', '.zip', '.css', '.js']):
-                                if '#' not in link.split('?')[0][-1:]:
+                                # FIX 2: Dedup pe versiunea fără query string
+                                # /products?id=1 și /products?id=2 vor fi tratate ca aceeași pagină
+                                link_normalizat = link.split('?')[0]
+                                if link_normalizat not in vizitate_normalizate:
+                                    vizitate_normalizate.add(link_normalizat)
                                     de_vizitat.append((link, adancime + 1))
             except:
                 continue
@@ -128,7 +138,7 @@ def scaneaza_headere_http(url: str) -> str:
         except:
             homepage_len = -1
 
-        rezultat += "\nVerificare directoare sensibile globale:\n"
+        rezultat += "\n🗂️ Verificare directoare sensibile globale:\n"
         directoare_gasite = False
 
         for cale, sev in directoare_universale.items():

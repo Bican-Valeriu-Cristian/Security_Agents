@@ -93,6 +93,43 @@ const TOOL_CONFIG = {
   }
 };
 
+// Helper pentru decodarea JWT-ului (fără validarea semnăturii)
+// JWT-ul are formatul: header.payload.signature - toate Base64URL
+// Backend-ul nostru îl creează cu {"sub": username, "exp": ...}
+const decodeToken = (token) => {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(atob(base64));
+    return decoded;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Verifică dacă token-ul e valid (există, are formă corectă, nu a expirat)
+const isTokenValid = (token) => {
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.exp) return false;
+  // exp e în secunde, Date.now() în milisecunde
+  return decoded.exp * 1000 > Date.now();
+};
+
+// Returnează username-ul DOAR dacă token-ul e valid
+const getUsernameFromToken = (token) => {
+  const decoded = decodeToken(token);
+  return decoded?.sub || null;
+};
+
+// Curăță token-ul din localStorage la pornire dacă e invalid/expirat
+const getInitialToken = () => {
+  const stored = localStorage.getItem("token");
+  if (stored && isTokenValid(stored)) return stored;
+  if (stored) localStorage.removeItem("token"); // curăță token-ul expirat
+  return "";
+};
+
 // ====== EMPTY STATE ======
 const EmptyState = ({ toolKey }) => {
   const cfg = TOOL_CONFIG[toolKey] || TOOL_CONFIG.full;
@@ -190,13 +227,28 @@ export default function App() {
   const [rawData, setRawData] = useState("");
   const [aiData, setAiData] = useState("");
   const [history, setHistory] = useState([]);
-  const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [token, setToken] = useState(getInitialToken());
   const [authMode, setAuthMode] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  // Username-ul curent extras din JWT - recalculat când token se schimbă
+  const currentUsername = getUsernameFromToken(token);
+
   const api = axios.create({ baseURL: "http://localhost:8000" });
   api.interceptors.request.use(config => { if (token) config.headers.Authorization = `Bearer ${token}`; return config; });
+
+  // Deconectare automată dacă serverul refuză token-ul (401)
+  api.interceptors.response.use(
+    response => response,
+    error => {
+      if (error.response?.status === 401) {
+        setToken("");
+        localStorage.removeItem("token");
+      }
+      return Promise.reject(error);
+    }
+  );
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -258,12 +310,10 @@ export default function App() {
 
           {/* Logo + brand */}
           <div style={{ padding: '32px 36px 0 36px', textAlign: 'center' }}>
-            <div style={{ fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#0f172a', marginBottom: '4px' }}>
-              🛡️ SECURITY OS
+            <div style={{ fontSize: '22px', fontWeight: '900', letterSpacing: '-0.5px', color: '#0f172a', marginBottom: '4px' }}>
+              🛡️ WebScan<span style={{ color: '#3b82f6' }}>AI</span>
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', letterSpacing: '0.5px' }}>
-              Audit platform · v1.0
-            </div>
+            
           </div>
 
           {/* Tabs Login / Register */}
@@ -443,8 +493,8 @@ export default function App() {
   return (
     <>
       <div className="sidebar">
-        <div style={{ fontSize: '18px', fontWeight: '900', letterSpacing: '1px', marginBottom: '30px', color: '#ffffff' }}>
-          🛡️ SECURITY OS
+        <div style={{ fontSize: '20px', fontWeight: '900', letterSpacing: '-0.5px', marginBottom: '30px', color: '#ffffff' }}>
+          🛡️ WebScan<span style={{ color: '#60a5fa' }}>AI</span>
         </div>
         
         <button className={`tool-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>🏠 DASHBOARD</button>
@@ -459,8 +509,19 @@ export default function App() {
             {TOOLS.map(t => <button key={t.id} className={`tool-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => { setActiveTab(t.id); setAiData(""); setRawData(""); }}>{t.name}</button>)}
           </>
         )}
-        
-        <button className="tool-btn" style={{ marginTop: 'auto', color: '#fca5a5', background: 'rgba(220, 38, 38, 0.12)', borderColor: 'rgba(220, 38, 38, 0.3)' }} onClick={() => { setToken(""); localStorage.removeItem("token"); }}>🚪 SIGN OUT</button>
+
+        {/* User info card + Sign out — grupate jos */}
+        <div className="user-info-card" style={{ marginTop: 'auto' }}>
+          <div className="user-avatar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div className="user-info-name">{currentUsername || 'utilizator'}</div>
+        </div>
+
+        <button className="tool-btn" style={{ color: '#fca5a5', background: 'rgba(220, 38, 38, 0.12)', borderColor: 'rgba(220, 38, 38, 0.3)' }} onClick={() => { setToken(""); localStorage.removeItem("token"); }}>🚪 SIGN OUT</button>
       </div>
 
       <div className="main-content">
@@ -473,7 +534,7 @@ export default function App() {
             {!loading && !rawData && !aiData ? (
               <>
                 <div className="action-bar">
-                  <input className="url-input-modern" value={url} onChange={e => setUrl(e.target.value)} placeholder="ENTER_TARGET_URL (e.g. https://target.com)" />
+                  <input className="url-input-modern" value={url} onChange={e => setUrl(e.target.value)} placeholder="TARGET_URL (e.g. https://target.com)" />
                   <button className="scan-btn-glow" onClick={executeScan} disabled={loading}>{loading ? 'SCANNING...' : 'RUN SCAN'}</button>
                 </div>
                 <div className="empty-state-fullscreen">

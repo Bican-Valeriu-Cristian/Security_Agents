@@ -5,3 +5,6 @@ python -m uvicorn api:app --reload
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 <br>
 npm run dev
+<br>
+http://testaspnet.vulnweb.com/
+https://dannicula.ro/contact.html

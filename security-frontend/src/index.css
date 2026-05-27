@@ -87,6 +87,41 @@ body {
   box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2);
 }
 
+/* ====== USER INFO CARD (deasupra Sign Out) ====== */
+.user-info-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #10b981);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
+.user-info-name {
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
 /* ====== MAIN CONTENT ====== */
 .main-content {
   flex: 1;
@@ -342,6 +377,8 @@ body {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .panel-content h1,
@@ -401,6 +438,7 @@ body {
   font-size: 13px;
   white-space: pre-wrap;
   line-height: 1.6;
+  word-break: break-all;
 }
 
 /* ====== HISTORY CARDS — Compact Grid ====== */
@@ -426,6 +464,8 @@ body {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  min-width: 0;
+  
 }
 
 .history-card-cyber:hover {
