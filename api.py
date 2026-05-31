@@ -662,7 +662,6 @@ async def get_history(db: Session = Depends(get_db), current_user: User = Depend
             "tool_used": s.tool_used,
             "ai_analysis": s.ai_analysis,
             "raw_data": s.raw_data,
-            # Marcăm timestamp-ul ca UTC explicit (sufixul Z) ca browser-ul să-l convertească corect în ora locală
             "timestamp": s.timestamp.isoformat() + "Z" if s.timestamp else None,
         }
         for s in scanari

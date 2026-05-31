@@ -211,7 +211,7 @@ body {
   min-height: 0;
 }
 
-/* Coloane noi - fiecare cu mai multe panouri stacked vertical */
+
 .left-column,
 .right-column {
   display: flex;
@@ -546,7 +546,7 @@ body {
   font-size: 13px;
 }
 
-/* Empty state special pentru terminal (fundal dark) - păstrat pentru eventuale variante viitoare */
+
 .terminal-panel .empty-state-title { color: #e2e8f0; }
 .terminal-panel .empty-state-description { color: #94a3b8; }
 .terminal-panel .empty-state-checklist li { color: #94a3b8; }

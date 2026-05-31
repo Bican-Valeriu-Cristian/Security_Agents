@@ -51,8 +51,7 @@ def scaneaza_headere_http(url: str) -> str:
             rezultat += "\n✅ Toate headerele de securitate esențiale sunt prezente.\n"
 
         # === CRAWLING RECURSIV LIMITAT ===
-        # Pornește de la URL-ul dat, extrage link-urile reale ale site-ului
-        # și le verifică — găsește pagini care există efectiv, nu căi ghicite.
+        
         rezultat += "\n📡 CRAWLING SITE (pagini descoperite):\n"
 
         domeniu_baza = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
@@ -81,16 +80,14 @@ def scaneaza_headere_http(url: str) -> str:
                     for tag in soup.find_all('a', href=True):
                         link = urljoin(url_curent, tag['href'])
 
-                        # FIX 1: Scoatem fragmentul/ancora (#contact, #top)
-                        # /about#contact și /about#team devin amândouă /about
+                        # FIX 1: Scoatem fragmentul/ancora
                         link, _ = urldefrag(link)
 
                         # Păstrăm doar link-urile de pe același domeniu
                         if link.startswith(domeniu_baza) and link not in vizitate:
                             # Excludem fișiere binare
                             if not any(link.endswith(ext) for ext in ['.jpg', '.png', '.gif', '.pdf', '.zip', '.css', '.js']):
-                                # FIX 2: Dedup pe versiunea fără query string
-                                # /products?id=1 și /products?id=2 vor fi tratate ca aceeași pagină
+                                # FIX 2: Normalizăm link-ul pentru a evita duplicatele din cauza query string-urilor
                                 link_normalizat = link.split('?')[0]
                                 if link_normalizat not in vizitate_normalizate:
                                     vizitate_normalizate.add(link_normalizat)

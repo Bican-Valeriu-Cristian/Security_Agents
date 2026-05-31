@@ -6,9 +6,12 @@ from urllib.parse import urljoin
 
 def scaneaza_cod_sursa(url: str) -> str:
     """
-    Descarcă și analizează codul sursă HTML și TOATE scripturile .js externe.
-    Caută comentarii, input-uri ascunse și folosește RegEx pentru a detecta
-    chei API, token-uri sau parole lăsate în clar (OWASP A01/A05).
+    Această funcție face un scraping avansat al paginii web specificate prin URL, căutând:
+1. Comentarii HTML ascunse care ar putea conține informații sensibile sau indicii despre structura aplicației.
+2. Input-uri de tip "hidden" care ar putea dezvălui parametri sau token-uri ascunse în formulare.
+3. Fișiere JavaScript externe legate în pagină, pe care le descarcă și le include în analiza pentru a căuta secrete sau comentarii suspecte în codul JS.
+4. Aplică expresii regulate pentru a identifica posibile token-uri JWT, chei API hardcodate, sau adrese de email interne care nu ar trebui să fie expuse în codul sursă.
+5. Analizează comentariile din codul JavaScript (atât cele single-line, cât și cele multi-line) pentru a găsi cuvinte cheie suspecte relevante pentru un audit de securitate (ex: TODO, FIXME, password, api, secret, admin, debug, etc.).
     """
     print(f"\n[👀 Tool Executat] Scanez în profunzime sursa și fișierele JS pentru {url}...")
     
@@ -53,19 +56,19 @@ def scaneaza_cod_sursa(url: str) -> str:
         
         # 3. DESCĂRCAREA FIȘIERELOR JAVASCRIPT
         
-        text_de_analizat = text_brut  # Începem prin a analiza HTML-ul
-        js_text_total = ""             # Vom acumula separat tot codul JS pentru analiza comentariilor
+        text_de_analizat = text_brut  # combinăm tot textul HTML cu conținutul JS pentru a avea o "grămadă" mare de text pe care să aplicăm RegEx-ul pentru secrete
+        js_text_total = ""            
         
         scripturi = soup.find_all('script', src=True)
         if scripturi:
             rezultat += f"\n📥 EXTRAGERE FIȘIERE JAVASCRIPT ({len(scripturi)} găsite):\n"
             for script in scripturi:
-                # urljoin transformă "/static/js/main.js" în "http://localhost:3000/static/js/main.js"
+            
                 js_url = urljoin(url, script['src']) 
                 try:
                     js_raspuns = requests.get(js_url, timeout=5)
                     if js_raspuns.status_code == 200:
-                        # Adăugăm codul JS uriaș la "grămada" noastră de text pe care o va citi RegEx-ul
+                        
                         text_de_analizat += "\n" + js_raspuns.text 
                         js_text_total += "\n" + js_raspuns.text  # separat doar JS-ul
                         rezultat += f"- Succes: Am descărcat și inclus în analiză {js_url}\n"
@@ -74,7 +77,7 @@ def scaneaza_cod_sursa(url: str) -> str:
         else:
             rezultat += "\n📥 Nu am găsit fișiere .js externe de descărcat.\n"
 
-        # Includem și scripturile inline din HTML pentru analiza comentariilor JS
+        # includem și scripturile inline (fără src) în analiza pentru secrete și comentarii
         scripturi_inline = soup.find_all('script', src=False)
         for script_inline in scripturi_inline:
             if script_inline.string:
@@ -92,16 +95,14 @@ def scaneaza_cod_sursa(url: str) -> str:
         }
 
         for nume_vulnerabilitate, sablon in modele_regex.items():
-            # Aplicăm RegEx-ul pe tot textul combinat (HTML + JS) pentru a găsi posibile secrete
+            # Aplicăm RegEx-ul pe tot textul 
             potriviri = set(re.findall(sablon, text_de_analizat)) 
             
             if potriviri:
                 secrete_gasite = True
                 rezultat += f"\n  [{nume_vulnerabilitate}]:\n"
                 for potrivire in potriviri:
-                    # re.findall cu grupuri de captură returnează tuple-uri.
-                    # Ex: ('api_key', 'valoarea_secretă') → vrem elementul [1]
-                    # Fără grupuri (ex: JWT), returnează direct un string.
+                
                     if isinstance(potrivire, tuple):
                         valoare_gasita = potrivire[1]  # luăm valoarea secretă, nu numele variabilei
                     else:
@@ -116,8 +117,7 @@ def scaneaza_cod_sursa(url: str) -> str:
         rezultat += "\n💬 COMENTARII SUSPECTE ÎN COD JAVASCRIPT:\n"
 
         if js_text_total.strip():
-            # Pattern pentru comentarii single-line // ... (până la sfârșit de linie)
-            # Exclud URL-urile (http:// https://) cu negative lookbehind
+            # Pattern pentru comentarii single-line // ...
             comentarii_js_single = re.findall(r'(?<!:)//\s*(.+?)$', js_text_total, re.MULTILINE)
 
             # Pattern pentru comentarii multi-line /* ... */
